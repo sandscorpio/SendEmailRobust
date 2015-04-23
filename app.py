@@ -81,9 +81,11 @@ class SendEmail:
   def send_email(self):
     """
     Send email robustly. Fail over to backup service if primary service fails
-    Returns 201 on success, 400 on failure
+    Returns True on success, False otherwise
     """
-    # TODO: check from/to/subject/body have been set
+    if not (self.to_addresses and self.subject and self.body and self.from_address):
+      raise StandardError('Set email fields before calling send_email()')
+
     is_email_sent = self.send_email_primary()
     
     if not is_email_sent:
@@ -91,9 +93,9 @@ class SendEmail:
       is_email_sent = self.send_email_backup()
       if not is_email_sent:
         # both primary and backup email providers failed
-        return make_error(httplib.SERVICE_UNAVAILABLE, 'Sorry, unable to send email currently. Please try again later')
+        return False
     
-    return jsonify({'status' : httplib.OK, 'msg' : 'success'}), httplib.OK
+    return True
     
   def send_email_primary(self):
     """
@@ -146,34 +148,10 @@ def get_password(username):
 @auth.error_handler
 def unauthorized():
     return make_response(jsonify({'error': 'Unauthorized access'}), 401)
-    
-@app.errorhandler(404)
-def not_found(error):
-    return make_response(jsonify({'error': 'Not found'}), 404)
 
 @app.route('/')
 def index():
-    return "Hello, World 2!"
-    
-@app.route('/todo/api/v1.0/tasks/<int:task_id>', methods=['GET'])
-def get_task(task_id):
-    task = [task for task in tasks if task['id'] == task_id]
-    if len(task) == 0:
-        abort(404)
-    return jsonify({'task': task[0]})
-    
-@app.route('/todo/api/v1.0/tasks', methods=['POST'])
-def create_task():
-    if not request.json or not 'title' in request.json:
-        abort(400)
-    task = {
-        'id': tasks[-1]['id'] + 1,
-        'title': request.json['title'],
-        'description': request.json.get('description', ""),
-        'done': False
-    }
-    tasks.append(task)
-    return jsonify({'task': task}), 201
+    return "Hello, World!"
     
 @app.route('/todo/api/v1.0/email', methods=['POST'])
 def email():
@@ -203,9 +181,7 @@ def email():
   subject = request.json['subject']
   body = request.json['body']
   
-  #TODO: use a singleton
   sender = SendEmail()
-  
   if not sender.set_from(from_address):
     return make_error(httplib.NOT_ACCEPTABLE, 'From field is not a valid address')
   if not sender.set_to(to_addresses):
@@ -215,7 +191,10 @@ def email():
   if not sender.set_body(body):
     return make_error(httplib.NOT_ACCEPTABLE, 'Body is not valid')
   
-  return sender.send_email()
+  if sender.send_email():
+    return jsonify({'status' : httplib.OK, 'msg' : 'success'}), httplib.OK
+  
+  return make_error(httplib.SERVICE_UNAVAILABLE, 'Sorry, unable to send email currently. Please try again later')
   
 def make_error(response_code, error):
   return make_response(jsonify({'response_code' : response_code, 'error': error}), response_code)
