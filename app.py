@@ -81,6 +81,15 @@ class SendEmail:
         
     return True
     
+  @staticmethod
+  def is_valid_email(email):
+    """
+    Helper static method to check if given email is a valid email address
+    Returns True on success, False otherwise
+    """
+    #TODO: Alternatively use validate_email python module
+    return re.match(r"[^@]+@[^@]+\.[^@]+", email)
+    
   def set_subject(self, subject):
     """
     Set subject
@@ -96,15 +105,6 @@ class SendEmail:
     """
     self.body = body
     return True
-  
-  @staticmethod
-  def is_valid_email(email):
-    """
-    Helper static method to check if given email is a valid email address
-    Returns True on success, False otherwise
-    """
-    #TODO: Alternatively use validate_email python module
-    return re.match(r"[^@]+@[^@]+\.[^@]+", email)
     
   def send_email(self):
     """
