@@ -16,6 +16,8 @@ class SendEmail:
   """
   
   to_addresses = []
+  cc_addresses = []
+  bcc_addresses = []
   subject = ''
   body = ''
   from_address = ''
@@ -41,13 +43,42 @@ class SendEmail:
     Must be an array of one or more valid email addresses
     Returns True on success, False otherwise
     """
-    self.to_addresses = []
-    for address in to_addresses:
-      if self.is_valid_email(address):
-        self.to_addresses.append(address)
-      else:
-        return False
+    if SendEmail.verify_email_addresses(to_addresses):
+      self.to_addresses = to_addresses
+      return True
+    return False
     
+  def set_cc(self, cc_addresses):
+    """
+    Set CC field for email.
+    Must be an array of one or more valid email addresses
+    Returns True on success, False otherwise
+    """
+    if SendEmail.verify_email_addresses(cc_addresses):
+      self.cc_addresses = cc_addresses
+      return True
+    return False
+    
+  def set_bcc(self, bcc_addresses):
+    """
+    Set BCC field for email.
+    Must be an array of one or more valid email addresses
+    Returns True on success, False otherwise
+    """
+    if SendEmail.verify_email_addresses(bcc_addresses):
+      self.bcc_addresses = bcc_addresses
+      return True
+    return False
+    
+  @staticmethod
+  def verify_email_addresses(addresses):
+    """
+    Helper static method to check if all addresses are valid
+    """
+    for address in addresses:
+      if not SendEmail.is_valid_email(address):
+        return False
+        
     return True
     
   def set_subject(self, subject):
@@ -55,7 +86,6 @@ class SendEmail:
     Set subject
     Returns True on success, False otherwise
     """
-    # TODO: check for subject restrictions
     self.subject = subject
     return True
     
@@ -81,10 +111,10 @@ class SendEmail:
     Send email robustly. Fail over to backup service if primary service fails
     Returns True on success, False otherwise
     """
-    if not (self.to_addresses and self.subject and self.body and self.from_address):
-      raise StandardError('Set email fields before calling send_email()')
+    if not (self.to_addresses and self.from_address):
+      raise StandardError('TO/FROM must be set before calling send_email()')
 
-    is_email_sent = self.send_email_primary()
+    is_email_sent = self.send_email_backup()
     
     if not is_email_sent:
       # fail over to backup email provider
@@ -98,21 +128,25 @@ class SendEmail:
   def send_email_primary(self):
     """
     Send email using primary service (Sendgrid)
-    Returns 201 on success, None on failure
+    Returns True on success, False otherwise
     """
     sg = sendgrid.SendGridClient(constants.SENDGRID_USERNAME, constants.SENDGRID_PASSWORD, raise_errors=True)
     message = sendgrid.Mail()
     message.add_to(self.to_addresses)
+    if self.cc_addresses:
+      message.add_cc(self.cc_addresses)
+    if self.bcc_addresses:
+      message.add_cc(self.bcc_addresses)
     message.set_subject(self.subject)
     message.set_text(self.body)
     message.set_from(self.from_address)
     
     try:
       status, msg = sg.send(message)
-    except SendGridClientError:
-      return None
-    except SendGridServerError:
-      return None
+    except sendgrid.SendGridClientError:
+      return False
+    except sendgrid.SendGridServerError:
+      return False
       
     return True
     
@@ -121,18 +155,25 @@ class SendEmail:
     Send email using backup service (Mailgun)
     Returns 201 on success, None on failure
     """
-    request = requests.post(
-            constants.MAILGUN_DOMAIN,
-            auth=("api", constants.MAILGUN_KEY),
-            data={"from": self.from_address,
-                  "to": ','.join(self.to_addresses),
+    
+    data = {"from": self.from_address,
+                  "to": ','.join(self.to_addresses), #pass TO field as comma separated email addresses
                   "subject": self.subject,
-                  "text": self.body})
+                  "text": self.body}
+    if self.cc_addresses:
+      data['cc'] = ','.join(self.cc_addresses)
+    if self.bcc_addresses:
+      data['bcc'] = ','.join(self.bcc_addresses)
+      
+    request = requests.post(
+                constants.MAILGUN_DOMAIN,
+                auth=("api", constants.MAILGUN_KEY),
+                data=data)
                 
     if request.status_code != httplib.OK:
-      return None
+      return False
     
-    return jsonify({'status' : request.status_code, 'msg' : request.text}), httplib.ACCEPTED
+    return True
 
 app = Flask(__name__)
 auth = HTTPBasicAuth()
@@ -156,10 +197,12 @@ def email():
   """
   Send email robustly.
   All fields should be passed in JSON. Expecting:
-   - subject : subject
+   - subject : subject (can be empty)
    - from : email_address
-   - to : array of email_address(es) 
-   - body : body
+   - to : array of email_addresses 
+   - body : body (can be empty)
+   - cc : array of email_addresses  optional
+   - bcc : array of email_addresses optional
    
   Returns OK on success 
   """
@@ -178,6 +221,8 @@ def email():
   to_addresses = request.json['to']
   subject = request.json['subject']
   body = request.json['body']
+  cc = request.json['cc'] if 'cc' in request.json else ''
+  bcc = request.json['bcc'] if 'bcc' in request.json else ''
   
   sender = SendEmail()
   if not sender.set_from(from_address):
@@ -188,6 +233,10 @@ def email():
     return make_error(httplib.NOT_ACCEPTABLE, 'Subject is not valid')
   if not sender.set_body(body):
     return make_error(httplib.NOT_ACCEPTABLE, 'Body is not valid')
+  if cc and not sender.set_cc(cc):
+    return make_error(httplib.NOT_ACCEPTABLE, 'CC is not valid addresses')
+  if bcc and not sender.set_bcc(bcc):
+    return make_error(httplib.NOT_ACCEPTABLE, 'BCC is not valid addresses')
   
   if sender.send_email():
     # successfully sent email
