@@ -1,30 +1,12 @@
 #!/usr/bin/python
-import httplib
 import re
-import sendgrid
-import requests
+import httplib
 from flask import Flask, jsonify, abort
 from flask import make_response, request, url_for
 from flask.ext.httpauth import HTTPBasicAuth
+import sendgrid
+import requests
 import constants #contains our private keys 
-
-app = Flask(__name__)
-auth = HTTPBasicAuth()
-
-tasks = [
-    {
-        'id': 1,
-        'title': u'Buy groceries',
-        'description': u'Milk, Cheese, Pizza, Fruit, Tylenol', 
-        'done': False
-    },
-    {
-        'id': 2,
-        'title': u'Learn Python',
-        'description': u'Need to find a good Python tutorial on the web', 
-        'done': False
-    }
-]
 
 class SendEmail:
   """
@@ -87,9 +69,10 @@ class SendEmail:
     self.body = body
     return True
   
-  def is_valid_email(self, email):
+  @staticmethod
+  def is_valid_email(email):
     """
-    Helper function to check if given email is a valid email address
+    Helper static method to check if given email is a valid email address
     Returns True on success, False otherwise
     """
     #TODO: Alternatively use validate_email python module
@@ -101,20 +84,22 @@ class SendEmail:
     Returns 201 on success, 400 on failure
     """
     # TODO: check from/to/subject/body have been set
-    send_email = self.send_email_primary()
-    if send_email == None:
+    is_email_sent = self.send_email_primary()
+    
+    if not is_email_sent:
       # fail over to backup email provider
-      send_email = self.send_email_backup()
-      if send_email == None:
-        return make_error(201, 'Unable to send email')
-    return send_email
+      is_email_sent = self.send_email_backup()
+      if not is_email_sent:
+        # both primary and backup email providers failed
+        return make_error(httplib.SERVICE_UNAVAILABLE, 'Sorry, unable to send email currently. Please try again later')
+    
+    return jsonify({'status' : httplib.OK, 'msg' : 'success'}), httplib.OK
     
   def send_email_primary(self):
     """
     Send email using primary service (Sendgrid)
     Returns 201 on success, None on failure
     """
-    # TODO: save login credentials in environment file
     sg = sendgrid.SendGridClient(constants.SENDGRID_USERNAME, constants.SENDGRID_PASSWORD, raise_errors=True)
     message = sendgrid.Mail()
     message.add_to(','.join(self.to_addresses)) #check how to support multiple email addresses
@@ -129,7 +114,7 @@ class SendEmail:
     except SendGridServerError:
       return None
       
-    return jsonify({'status' : status, 'msg' : msg}), 201 #why 201?
+    return True
     
   def send_email_backup(self):
     """
@@ -144,11 +129,13 @@ class SendEmail:
                   "subject": self.subject,
                   "text": self.body})
                 
-    if request.status_code != 200:
-      # TODO: abort with 402 () or queue message in database and have a background process send those
+    if request.status_code != httplib.OK:
       return None
     
-    return jsonify({'status' : request.status_code, 'msg' : request.text}), 201
+    return jsonify({'status' : request.status_code, 'msg' : request.text}), httplib.ACCEPTED
+
+app = Flask(__name__)
+auth = HTTPBasicAuth()
 
 @auth.get_password
 def get_password(username):
@@ -159,14 +146,14 @@ def get_password(username):
 @auth.error_handler
 def unauthorized():
     return make_response(jsonify({'error': 'Unauthorized access'}), 401)
+    
+@app.errorhandler(404)
+def not_found(error):
+    return make_response(jsonify({'error': 'Not found'}), 404)
 
 @app.route('/')
 def index():
     return "Hello, World 2!"
-    
-@app.route('/todo/api/v1.0/tasks', methods=['GET'])
-def get_tasks():
-    return jsonify({'tasks': [make_public_task(task) for task in tasks]})
     
 @app.route('/todo/api/v1.0/tasks/<int:task_id>', methods=['GET'])
 def get_task(task_id):
@@ -190,17 +177,26 @@ def create_task():
     
 @app.route('/todo/api/v1.0/email', methods=['POST'])
 def email():
-  #TODO: other field checks. is there a more concise way of checking all in request.json?
+  """
+  Send email robustly.
+  All fields should be passed in JSON. Expecting:
+   - subject : subject
+   - from : email_address
+   - to : email_address(es) (comma separated)
+   - body : body
+   
+  Returns 201 on success, 400 on failure   
+  """
   if not request.json:
-    return make_error(404, 'expecting json')
+    return make_error(httplib.BAD_REQUEST, 'Expecting JSON-encoded values')
   elif not 'subject' in request.json:
-    return make_error(404, 'no subject')
+    return make_error(httplib.BAD_REQUEST, 'Missing subject')
   elif not 'from' in request.json:
-    return make_error(404, 'no from')
+    return make_error(httplib.BAD_REQUEST, 'Missing from')
   elif not 'to' in request.json:
-    return make_error(404, 'no to')
+    return make_error(httplib.BAD_REQUEST, 'Missing to')
   elif not 'body' in request.json:
-    return make_error(404, 'no body')
+    return make_error(httplib.BAD_REQUEST, 'Missing body')
     
   from_address = request.json['from']
   to_addresses = request.json['to']
@@ -211,57 +207,18 @@ def email():
   sender = SendEmail()
   
   if not sender.set_from(from_address):
-    # return error json with " from field is not a valid email"
-    return make_error(201, 'From field is not a valid address')
-    
+    return make_error(httplib.NOT_ACCEPTABLE, 'From field is not a valid address')
   if not sender.set_to(to_addresses):
-    return make_error(201, 'To field is not valid addresses')
-  
-  sender.set_subject(subject)
-  sender.set_body(body)
+    return make_error(httplib.NOT_ACCEPTABLE, 'To field is not valid addresses')
+  if not sender.set_subject(subject):
+    return make_error(httplib.NOT_ACCEPTABLE, 'Subject is not valid')
+  if not sender.set_body(body):
+    return make_error(httplib.NOT_ACCEPTABLE, 'Body is not valid')
   
   return sender.send_email()
   
-def make_error(error_code, error):
-  return make_response(jsonify({'error_code' : error_code, 'error': error}), 401)
-  
-def update_task(task_id):
-    task = [task for task in tasks if task['id'] == task_id]
-    if len(task) == 0:
-        abort(404)
-    if not request.json:
-        abort(400)
-    if 'title' in request.json and type(request.json['title']) != unicode:
-        abort(400)
-    if 'description' in request.json and type(request.json['description']) is not unicode:
-        abort(400)
-    if 'done' in request.json and type(request.json['done']) is not bool:
-        abort(400)
-    task[0]['title'] = request.json.get('title', task[0]['title'])
-    task[0]['description'] = request.json.get('description', task[0]['description'])
-    task[0]['done'] = request.json.get('done', task[0]['done'])
-    return jsonify({'task': task[0]})
-
-@app.route('/todo/api/v1.0/tasks/<int:task_id>', methods=['DELETE'])
-def delete_task(task_id):
-    task = [task for task in tasks if task['id'] == task_id]
-    if len(task) == 0:
-        abort(404)
-    tasks.remove(task[0])
-    return jsonify({'result': True})
-    
-def make_public_task(task):
-    new_task = {}
-    for field in task:
-        if field == 'id':
-            new_task['uri'] = url_for('get_task', task_id=task['id'], _external=True)
-        else:
-            new_task[field] = task[field]
-    return new_task
-
-@app.errorhandler(404)
-def not_found(error):
-    return make_response(jsonify({'error': 'Not found'}), 404)
+def make_error(response_code, error):
+  return make_response(jsonify({'response_code' : response_code, 'error': error}), response_code)
 
 if __name__ == '__main__':
     app.run(debug=True)
