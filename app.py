@@ -37,14 +37,12 @@ class SendEmail:
     
   def set_to(self, to_addresses):
     """
-    Set to field for email.
-    Must be one or more valid email addresses separated by commas
+    Set TO field for email.
+    Must be an array of one or more valid email addresses
     Returns True on success, False otherwise
     """
     self.to_addresses = []
-    
-    addresses = to_addresses.split(',')
-    for address in addresses:
+    for address in to_addresses:
       if self.is_valid_email(address):
         self.to_addresses.append(address)
       else:
@@ -104,7 +102,7 @@ class SendEmail:
     """
     sg = sendgrid.SendGridClient(constants.SENDGRID_USERNAME, constants.SENDGRID_PASSWORD, raise_errors=True)
     message = sendgrid.Mail()
-    message.add_to(','.join(self.to_addresses)) #check how to support multiple email addresses
+    message.add_to(self.to_addresses)
     message.set_subject(self.subject)
     message.set_text(self.body)
     message.set_from(self.from_address)
@@ -127,7 +125,7 @@ class SendEmail:
             constants.MAILGUN_DOMAIN,
             auth=("api", constants.MAILGUN_KEY),
             data={"from": self.from_address,
-                  "to": self.to_addresses,
+                  "to": ','.join(self.to_addresses),
                   "subject": self.subject,
                   "text": self.body})
                 
@@ -160,10 +158,10 @@ def email():
   All fields should be passed in JSON. Expecting:
    - subject : subject
    - from : email_address
-   - to : email_address(es) (comma separated)
+   - to : array of email_address(es) 
    - body : body
    
-  Returns 201 on success, 400 on failure   
+  Returns OK on success 
   """
   if not request.json:
     return make_error(httplib.BAD_REQUEST, 'Expecting JSON-encoded values')
@@ -192,6 +190,7 @@ def email():
     return make_error(httplib.NOT_ACCEPTABLE, 'Body is not valid')
   
   if sender.send_email():
+    # successfully sent email
     return jsonify({'status' : httplib.OK, 'msg' : 'success'}), httplib.OK
   
   return make_error(httplib.SERVICE_UNAVAILABLE, 'Sorry, unable to send email currently. Please try again later')
