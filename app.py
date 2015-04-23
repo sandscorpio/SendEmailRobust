@@ -1,13 +1,12 @@
 #!/usr/bin/python
-from flask import Flask, jsonify, abort
-from flask import make_response
-from flask import request
-from flask import url_for
-from flask.ext.httpauth import HTTPBasicAuth
 import httplib
 import re
 import sendgrid
 import requests
+from flask import Flask, jsonify, abort
+from flask import make_response, request, url_for
+from flask.ext.httpauth import HTTPBasicAuth
+import constants #contains our private keys 
 
 app = Flask(__name__)
 auth = HTTPBasicAuth()
@@ -28,7 +27,11 @@ tasks = [
 ]
 
 class SendEmail:
-  """Send emails robustly - if one provider fails, use another."""
+  """
+  Send emails robustly - if primary email service fails, use backup service to send email
+  File attachments are not supported
+  HTML is not supported
+  """
   
   to_addresses = []
   subject = ''
@@ -40,12 +43,22 @@ class SendEmail:
     return
     
   def set_from(self, from_address):
+    """
+    Set the from address. 
+    From address must be a valid email address
+    Returns True on success, False otherwise
+    """
     if self.is_valid_email(from_address):
       self.from_address = from_address
       return True
     return False
     
   def set_to(self, to_addresses):
+    """
+    Set to field for email.
+    Must be one or more valid email addresses separated by commas
+    Returns True on success, False otherwise
+    """
     self.to_addresses = []
     
     addresses = to_addresses.split(',')
@@ -58,25 +71,51 @@ class SendEmail:
     return True
     
   def set_subject(self, subject):
+    """
+    Set subject
+    Returns True on success, False otherwise
+    """
     # TODO: check for subject restrictions
     self.subject = subject
+    return True
     
   def set_body(self, body):
+    """
+    Set body
+    Returns True on success, False otherwise
+    """
     self.body = body
+    return True
   
   def is_valid_email(self, email):
-    #Alternatively use validate_email python module
+    """
+    Helper function to check if given email is a valid email address
+    Returns True on success, False otherwise
+    """
+    #TODO: Alternatively use validate_email python module
     return re.match(r"[^@]+@[^@]+\.[^@]+", email)
     
   def send_email(self):
-    send_email = self.send_email_backup()
+    """
+    Send email robustly. Fail over to backup service if primary service fails
+    Returns 201 on success, 400 on failure
+    """
+    # TODO: check from/to/subject/body have been set
+    send_email = self.send_email_primary()
     if send_email == None:
-      return make_error(201, 'Unable to send email')
+      # fail over to backup email provider
+      send_email = self.send_email_backup()
+      if send_email == None:
+        return make_error(201, 'Unable to send email')
     return send_email
     
   def send_email_primary(self):
+    """
+    Send email using primary service (Sendgrid)
+    Returns 201 on success, None on failure
+    """
     # TODO: save login credentials in environment file
-    sg = sendgrid.SendGridClient('sandscorpio', 'Sendgrid-00', raise_errors=True)
+    sg = sendgrid.SendGridClient(constants.SENDGRID_USERNAME, constants.SENDGRID_PASSWORD, raise_errors=True)
     message = sendgrid.Mail()
     message.add_to(','.join(self.to_addresses)) #check how to support multiple email addresses
     message.set_subject(self.subject)
@@ -93,9 +132,13 @@ class SendEmail:
     return jsonify({'status' : status, 'msg' : msg}), 201 #why 201?
     
   def send_email_backup(self):
+    """
+    Send email using backup service (Mailgun)
+    Returns 201 on success, None on failure
+    """
     request = requests.post(
-            'https://api.mailgun.net/v3/mangobird.mailgun.org/messages',
-            auth=("api", 'key-6xnrfd7a38uqa56nfq35ocq4nrqyiis1'),
+            constants.MAILGUN_DOMAIN,
+            auth=("api", constants.MAILGUN_KEY),
             data={"from": self.from_address,
                   "to": self.to_addresses,
                   "subject": self.subject,
@@ -198,8 +241,6 @@ def update_task(task_id):
     task[0]['description'] = request.json.get('description', task[0]['description'])
     task[0]['done'] = request.json.get('done', task[0]['done'])
     return jsonify({'task': task[0]})
-    
-
 
 @app.route('/todo/api/v1.0/tasks/<int:task_id>', methods=['DELETE'])
 def delete_task(task_id):
