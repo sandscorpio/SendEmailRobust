@@ -8,6 +8,10 @@ import sendgrid
 import requests
 import constants #contains our private keys 
 
+"""
+TESTING: curl -i -H "Content-Type: application/jsn" -X POST -d '{"subject":"Read a book", "from":"amit.aggarwal.x@gmail.com", "to":["amit.aggarwal.x@gmail.com","amit@mangobird.com"], "body":"books are great"}' http://127.0.0.1:5000/todo/api/v1.0/email
+"""
+
 class SendEmail:
   """
   Send emails robustly - if primary email service fails, use backup service to send email
