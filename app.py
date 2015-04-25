@@ -9,7 +9,7 @@ import requests
 import constants #contains our private keys 
 
 """
-TESTING: curl -i -H "Content-Type: application/jsn" -X POST -d '{"subject":"Read a book", "from":"amit.aggarwal.x@gmail.com", "to":["amit.aggarwal.x@gmail.com","amit@mangobird.com"], "body":"books are great"}' http://127.0.0.1:5000/todo/api/v1.0/email
+TESTING: curl -i -H "Content-Type: application/jsn" -X POST -d '{"subject":"Read a book", "from":"EMAIL1", "to":["EMAIL1","EMAIL2"], "body":"books are great"}' http://127.0.0.1:5000/todo/api/v1.0/email
 """
 
 class SendEmail:
