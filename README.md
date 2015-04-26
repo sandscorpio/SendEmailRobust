@@ -8,6 +8,7 @@ _API Features_
 * Versioned URI's so future versions can be written without breaking clients which are relying on previous versions
 * All classes and functions are documented
 * All user input is validated
+* Note: API keys for SendGrid and Mailgun have not been committed to this public repo.
 
 _Tech Stack_
 * Python with Flask for hosting
