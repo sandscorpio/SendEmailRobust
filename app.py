@@ -240,7 +240,7 @@ def email():
   return make_error(httplib.SERVICE_UNAVAILABLE, 'Sorry, unable to send email currently. Please try again later')
   
 def make_error(response_code, error):
-  return make_response(jsonify({'response_code' : response_code, 'error': error}), response_code)
+  return make_response(jsonify({'status' : response_code, 'error': error}), response_code)
 
 if __name__ == '__main__':
     app.run(debug=True)
