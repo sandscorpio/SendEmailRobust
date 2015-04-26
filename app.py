@@ -184,8 +184,8 @@ auth = HTTPBasicAuth()
 
 @auth.get_password
 def get_password(username):
-    if username == 'email':
-        return '12345'
+    if username == constants.API_USERNAME:
+        return constants.API_PASSWORD
     return None
 
 @auth.error_handler
