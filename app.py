@@ -3,13 +3,12 @@ import re
 import httplib
 from flask import Flask, jsonify, abort
 from flask import make_response, request, url_for
-from flask.ext.httpauth import HTTPBasicAuth
 import sendgrid
 import requests
 import constants #contains our private keys 
 
 """
-TESTING: curl -i -H "Content-Type: application/jsn" -X POST -d '{"subject":"Read a book", "from":"EMAIL1", "to":["EMAIL1","EMAIL2"], "body":"books are great"}' http://127.0.0.1:5000/todo/api/v1.0/email
+TESTING: curl -i -H "Content-Type: application/jsn" -X POST -d '{"subject":"Read a book", "from":"amit.aggarwal.x@gmail.com", "to":["amit.aggarwal.x@gmail.com","amit@mangobird.com"], "body":"books are great"}' https://fathomless-eyrie-8907.herokuapp.com/todo/api/v1.0/email
 """
 
 class SendEmail:
@@ -107,7 +106,7 @@ class SendEmail:
     Set body
     Returns True on success, False otherwise
     """
-    self.body = body
+    self.body = body if body else ' '
     return True
     
   def send_email(self):
@@ -118,7 +117,7 @@ class SendEmail:
     if not (self.to_addresses and self.from_address):
       raise StandardError('TO/FROM must be set before calling send_email()')
 
-    is_email_sent = self.send_email_backup()
+    is_email_sent = self.send_email_primary()
     
     if not is_email_sent:
       # fail over to backup email provider
@@ -180,21 +179,13 @@ class SendEmail:
     return True
 
 app = Flask(__name__)
-auth = HTTPBasicAuth()
 
-@auth.get_password
-def get_password(username):
-    if username == 'miguel':
-        return 'python'
-    return None
-
-@auth.error_handler
 def unauthorized():
     return make_response(jsonify({'error': 'Unauthorized access'}), 401)
 
 @app.route('/')
 def index():
-    return "Hello, World!"
+    return "Hello, Heroku!"
     
 @app.route('/todo/api/v1.0/email', methods=['POST'])
 def email():
