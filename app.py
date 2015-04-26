@@ -3,6 +3,7 @@ import re
 import httplib
 from flask import Flask, jsonify, abort
 from flask import make_response, request, url_for
+from flask.ext.httpauth import HTTPBasicAuth
 import sendgrid
 import requests
 import constants #contains our private keys 
@@ -179,15 +180,24 @@ class SendEmail:
     return True
 
 app = Flask(__name__)
+auth = HTTPBasicAuth()
 
+@auth.get_password
+def get_password(username):
+    if username == 'email':
+        return '12345'
+    return None
+
+@auth.error_handler
 def unauthorized():
-    return make_response(jsonify({'error': 'Unauthorized access'}), 401)
+    return make_error(httplib.UNAUTHORIZED, 'Unauthorized access')
 
 @app.route('/')
 def index():
     return "Hello, Heroku!"
     
 @app.route('/todo/api/v1.0/email', methods=['POST'])
+@auth.login_required
 def email():
   """
   Send email robustly.
