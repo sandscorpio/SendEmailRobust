@@ -10,7 +10,7 @@ _API Features_
 * All user input is validated
 * Requests are submitted via POST requests to be consistent with HTTP standards
 * Requests are authenticated via username/password
-* Note: API keys for SendGrid and Mailgun have not been committed to this public repo.
+* Note: Sensitive information like API keys for SendGrid and Mailgun and username/password have not been committed to this public repo (constants.py)
 
 _Tech Stack_
 * Python with Flask for hosting
@@ -20,7 +20,7 @@ _Tech Stack_
 
 _My experience_
 * I am new to Python so creating the API involved learning Python, Flask, and hosting on Heroku (also for first time). 
-* The Client app is an Android app, and I do have good experience there. Details for the app are provided in it's README.
+* The Client app is an Android app, and I do have good experience there. Details for the app are provided in its README.
 
 _Future_
 * Save username/password for requests encrypted in a database. Currently it is cleartext in source code
