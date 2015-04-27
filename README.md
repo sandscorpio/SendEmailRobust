@@ -24,6 +24,7 @@ _My experience_
 
 _Future_
 * Save username/password for requests encrypted in a database. Currently it is cleartext in source code
+* Add support for HTML emails and file attachements
 * Add unit tests so service can be maintained
 * In order to make the service faster, we can fail over faster. For instance, if a request to primary email service (SendGrid)  fails, we can set a flag in a database and use that flag to automatically fail over to backup email service (Mailgun), and skip primary, for a period of time (1 hour, for example). Once the flag expires, we can revert back to using SendGrid. This will keep our API's response time high even if SendGrid is down for a lengthy amount of time. Assuming that SendGrid has a high up-time, this logic will only be used sporadically but will keep our response time very high.
 
