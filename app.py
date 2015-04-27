@@ -23,7 +23,6 @@ class SendEmail:
   from_address = ''
   
   def __init__(self):
-    # to should be an array
     return
     
   def set_from(self, from_address):
